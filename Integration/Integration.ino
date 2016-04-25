@@ -63,9 +63,11 @@
 
 #define rotSpeed 60 //from 0 to 114 rpm
 #define torqueLIM 600 
-#define openAngle -50 // from -150 to 150°
+#define openMaxAngle -50 // from -150 to 150°
+#define openAngle -10
 #define closeAngle 65 // from -150 to 150°
 #define middleAngle 20 // from -150 to 150°
+#define balanceAngle 10
 
 #define positionAlerte 60 //en cm
 
@@ -126,8 +128,11 @@ const int qGrippermarg = 1;             // marge de consigne pour servGripper en
 //**********************************************************************
 AX12 motor[2] = {AX12(), AX12()};
 char openP[]="open";
+char openMaxP[] = "openMax";
 char closeP[]="close";
 char middle[]="middle";
+char balanceP[] = "balance";
+bool arretBalance;
 
 //**********************************************************************
 // Init Postion setup
@@ -264,17 +269,30 @@ void GripperCommandCallBack(const std_msgs::Int16& msg){
 // Front Plier order callback (input string)
 void servo_cb( const std_msgs::String& cmd_msg){
   MsTimer2::stop();
-  if (strcmp(cmd_msg.data, openP)==0)
+  if (strcmp(cmd_msg.data, openMaxP)==0)
   {
+    arretBalance = 1;
+    openMaxPliers();
+  }
+  else if (strcmp(cmd_msg.data, openP)==0)
+  {
+    arretBalance = 1;
     openPliers();
   }
   else if (strcmp(cmd_msg.data, closeP)==0)
   {
+    arretBalance = 1;
     closePliers();
   }
   else if (strcmp(cmd_msg.data, middle)==0)
   {
+    arretBalance = 1;
     middlePliers();
+  }
+  else if (strcmp(cmd_msg.data, balanceP)==0)
+  {
+    arretBalance = 0;
+    balancePliers();
   }
   MsTimer2::start();
 }
@@ -507,6 +525,18 @@ void sermove(float q[4]){
 //**********************************************************************
 // Front Pliers function
 //**********************************************************************
+void openMaxPliers()
+{
+  int pos = map(openMaxAngle, -150, 150, 0, 1023);
+  for (int i=0; i<=1; i++)
+  {
+    motor[i].writeInfo (TORQUE_ENABLE, 1);
+    motor[i].writeInfo (MAX_TORQUE, torqueLIM);
+    motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
+    motor[i].writeInfo(GOAL_POSITION, pos);
+  }
+}
+
 void openPliers()
 {
   int pos = map(openAngle, -150, 150, 0, 1023);
@@ -541,6 +571,29 @@ void middlePliers()
     motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
     motor[i].writeInfo(GOAL_POSITION, pos);
   }  
+}
+
+void balancePliers()
+{
+  int goalPos [2];
+  goalPos[0] = motor[0].readInfo (PRESENT_POSITION);
+  goalPos[1] = motor[1].readInfo (PRESENT_POSITION);
+  int sens = 1;
+  int debattement = map(balanceAngle, -150, 150, 0, 1023);
+  for (int i=0; i<=1; i++)
+  {
+    motor[i].writeInfo (TORQUE_ENABLE, 1);
+    motor[i].writeInfo (MAX_TORQUE, torqueLIM);
+  }  
+  while (!arretBalance)
+  {    
+    for (int i=0; i<=1; i++)
+    {
+      goalPos[i] = goalPos[i] + sens*debattement;
+      motor[i].writeInfo (GOAL_POSITION, goalPos[i]);
+    }  
+    sens = -sens;
+  }
 }
   
 //Initialisation des paramètres des moteurs
