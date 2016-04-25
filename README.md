@@ -63,11 +63,13 @@ Le uArm
     
 	**!!!!! ATTENTION** : Y est vers l'avant  
 
-
-    | Y
-    |               ROBOT VU DU HAUT !!!
-    |
-    |_________X 
+```
+| Y
+|
+|               ROBOT VU DU HAUT !!!
+|
+|_________X
+```
 
 
 Le gripper
