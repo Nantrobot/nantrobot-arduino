@@ -38,7 +38,6 @@
 #include <std_msgs/Int16.h>
 #include <std_msgs/Int32.h>
 #include <std_msgs/String.h>
-#include <std_msgs/Bool.h>
 #include <std_msgs/Empty.h>
 
 //**********************************************************************
@@ -64,10 +63,9 @@
 
 #define rotSpeed 60 //from 0 to 114 rpm
 #define torqueLIM 600 
-#define openAngle -100 // from -150 to 150°
-#define closeAngle 100 // from -150 to 150°
-#define middleAngle 20 // from -150 to 150°7
-#define tempsBlocage 1000 // temps à partir duquel on suppose les pinces bloqué (ms)
+#define openAngle -50 // from -150 to 150°
+#define closeAngle 65 // from -150 to 150°
+#define middleAngle 20 // from -150 to 150°
 
 #define positionAlerte 60 //en cm
 
@@ -130,9 +128,6 @@ AX12 motor[2] = {AX12(), AX12()};
 char openP[]="open";
 char closeP[]="close";
 char middle[]="middle";
-char balance[]="balance";
-char stopper[]="stop";
-volatile bool arret = false ; //booléen qui entraine l'arret de toutes les boucles en cours et donc des pinces
 
 //**********************************************************************
 // Init Postion setup
@@ -196,7 +191,6 @@ ros::NodeHandle nh;
 geometry_msgs::Twist current_state;
 std_msgs::Int16 behaviour;
 std_msgs::Int16 gripperState;
-std_msgs::Bool bmsg;
 std_msgs::Int32 pos1;
 std_msgs::Int32 pos2;
 
@@ -272,26 +266,15 @@ void servo_cb( const std_msgs::String& cmd_msg){
   MsTimer2::stop();
   if (strcmp(cmd_msg.data, openP)==0)
   {
-    arret=false;
     openPliers();
   }
   else if (strcmp(cmd_msg.data, closeP)==0)
   {
-    arret=false;
     closePliers();
   }
   else if (strcmp(cmd_msg.data, middle)==0)
   {
-    arret=false;
     middlePliers();
-  }
-  else if (strcmp(cmd_msg.data, balance)==0)
-  {
-    arret=false;
-    balancePliers();
-  }
-  else if (strcmp(cmd_msg.data, stopper)==0){
-    arret=true; 
   }
   MsTimer2::start();
 }
@@ -360,8 +343,7 @@ ros::Subscriber<std_msgs::Empty> ParasolCommand_sub("ParasolCommand", ParasolCom
 //**********************************************************************
 ros::Publisher uarmState_pub("UarmState", &current_state);      //
 ros::Publisher uarmBehaviour_pub("UarmBehaviour", &behaviour);
-ros::Publisher gripperState_pub("GripperState", &gripperState);  
-ros::Publisher pinceBloque_pub("FrontPlierState", &bmsg, true); //
+ros::Publisher gripperState_pub("GripperState", &gripperState);
 ros::Publisher ultrasonFront_pub ("UltrasonFront", &pos1); //
 ros::Publisher ultrasonBack_pub ("UltrasonBack", &pos2);   //
 
@@ -378,7 +360,6 @@ void setup(){
   nh.advertise(uarmState_pub);
   nh.advertise(uarmBehaviour_pub);
   nh.advertise(gripperState_pub);
-  nh.advertise(pinceBloque_pub);
   nh.advertise(ultrasonFront_pub);
   nh.advertise(ultrasonBack_pub);
    
@@ -407,10 +388,10 @@ void setup(){
   
   // Init Front Pliers
   AX12::init(1000000);
-  motor[0].id=1;
-  motor[1].id=2;
+  motor[0].id=3;
+  motor[1].id=4;
+  motor[0].inverse = true;
   motor_init();
-  motor[1].inverse=true; //Set the servo rotation to the inverse of the reference
   
   delay(100);
 
@@ -536,9 +517,6 @@ void openPliers()
     motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
     motor[i].writeInfo(GOAL_POSITION, pos);
   }
-  
-  int dateDebut = millis() ;
-  testBlocage(pos, dateDebut);
 }
 
 void closePliers()
@@ -551,9 +529,6 @@ void closePliers()
     motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
     motor[i].writeInfo(GOAL_POSITION, pos);
   }
-  
-  int dateDebut = millis() ;
-  testBlocage(pos, dateDebut);
 }
 
 void middlePliers()
@@ -565,64 +540,7 @@ void middlePliers()
     motor[i].writeInfo (MAX_TORQUE, torqueLIM);
     motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
     motor[i].writeInfo(GOAL_POSITION, pos);
-  }
-  
-  int dateDebut = millis() ;
-  testBlocage(pos, dateDebut);
-}
-
-//Fait faire des aller retour court aux pinces 
-void balancePliers ()
-{
-  int angle=40;
-  int pos [2];
-  int goalPos[2] = {motor[0].readInfo(PRESENT_POSITION), motor[1].readInfo(PRESENT_POSITION)};
-  while (!arret)
-  {
-    pos [0]=motor[0].readInfo(PRESENT_POSITION);
-    pos [1]=motor[1].readInfo(PRESENT_POSITION);
-    if ( pos [0]>(goalPos[0]-2) && pos [0]<(goalPos[0]+2) && pos [1]>(goalPos[1]-2) && pos [1]<(goalPos[1]+2)) //On verifie que les pinces sont arrivées à leur position
-    {
-      for (int i=0; i<2; i++)
-      {
-        goalPos[0]=pos[0]+angle;
-        goalPos[1]=pos[1]+angle;
-        motor[i].writeInfo (GOAL_POSITION, goalPos[i]); //on varie dans [posInit; posInit+40] soit environ une variation de 10°
-      }
-      angle=-angle;
-    }
-  }
-  stopPliers() ;
-}
-
-//Arrete les pinces dans leur position actuelle
-void stopPliers ()
-{
-  int pos;
-  for (int i=0; i<2; i++)
-  { 
-    pos= motor[i].readInfo (PRESENT_POSITION);
-    motor[i].writeInfo (GOAL_POSITION, pos);
-  }
-}
-  
-// Test pour savoir si les pinces ont atteint leur but
-void testBlocage(int goalPos, int dateDebut)
-{
-  int pos [2]={motor[0].readInfo(PRESENT_POSITION), motor[1].readInfo(PRESENT_POSITION)};
-  int date=millis();
-  
-  while ( (pos [0]<(goalPos-2) || pos [0]>(goalPos+2) || pos [1]<(goalPos-2) || pos [1]>(goalPos+2)) && ((date-dateDebut)<tempsBlocage) && (!arret))
-  {
-    pos[0]=motor[0].readInfo(PRESENT_POSITION);
-    pos[1]=motor[1].readInfo(PRESENT_POSITION);
-    date=millis();
-  }
-  if ((date-dateDebut)>=tempsBlocage){ //Si on a depasse le temps de blocage on publie true
-    pinceBloque_pub.publish( &bmsg);
-  }
-  
-  stopPliers();
+  }  
 }
   
 //Initialisation des paramètres des moteurs
