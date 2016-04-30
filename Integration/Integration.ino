@@ -62,12 +62,13 @@
 #define OPEN 2
 
 #define rotSpeed 60 //from 0 to 114 rpm
-#define torqueLIM 600 
+#define torqueLIM 1023 
 #define openMaxAngle -50 // from -150 to 150°
 #define openAngle -10
 #define closeAngle 65 // from -150 to 150°
+#define closeMaxAngle 100
+#define poseDepart 75
 #define middleAngle 20 // from -150 to 150°
-#define balanceAngle 10
 
 #define positionAlerte 60 //en cm
 
@@ -113,7 +114,7 @@ const float q2offset = 215.0;         // offset entre modèle et serv2 en °
 const int q3servmin= 10;              // limite min de consigne pour serv3 en °
 const int q3servmax= 170;             // limite max de consigne pour serv3 en °
 const int q3servmarg = 1;             // marge de consigne pour serv3 en °
-const float q3modmin = -10.0;         // limite min de consigne pour serv3 en ° (selon modèle)
+const float q3modmin = 10.0;         // limite min de consigne pour serv3 en ° (selon modèle)
 const float q3modmax = 170.0;          // limite max de consigne pour serv3 en ° (selon modèle)
 const float q3nlincoef = -1.0;         // coefficient non linéarité entre serv3 et modèle en °
 const float q3offset = 180;            // offset entre modèle et serv3 en °
@@ -129,17 +130,17 @@ const int qGrippermarg = 1;             // marge de consigne pour servGripper en
 AX12 motor[2] = {AX12(), AX12()};
 char openP[]="open";
 char openMaxP[] = "openMax";
+char departP[] = "depart";
 char closeP[]="close";
+char closeMaxP[] = "closeMax";
 char middle[]="middle";
-char balanceP[] = "balance";
-bool arretBalance;
 
 //**********************************************************************
 // Init Postion setup
 //**********************************************************************
 #define initSM0_angle 90        // position initiale du servo de base selon le modèle (en °)
-#define initSM1_angle 70        // position initiale du servo du bras 1 selon le modèle (en °)
-#define initSM2_angle 120       // position initiale du servo du bras 2 selon le modèle (en °)
+#define initSM1_angle 50        // position initiale du servo du bras 1 selon le modèle (en °)
+#define initSM2_angle 90       // position initiale du servo du bras 2 selon le modèle (en °)
 #define initSM3_angle 90        // position initiale du servo de l'effecteur selon le modèle (en °)
 #define initSMGripper_angle 120 // position initiale du servo de la pince (en °)
 #define initSMParasol_angle 20        // position initiale du servo du parasol (en °)
@@ -271,31 +272,42 @@ void servo_cb( const std_msgs::String& cmd_msg){
   MsTimer2::stop();
   if (strcmp(cmd_msg.data, openMaxP)==0)
   {
-    arretBalance = 1;
-    openMaxPliers();
+    movePliers(openMaxAngle);
   }
   else if (strcmp(cmd_msg.data, openP)==0)
   {
-    arretBalance = 1;
-    openPliers();
+    movePliers(openAngle);
   }
   else if (strcmp(cmd_msg.data, closeP)==0)
   {
-    arretBalance = 1;
-    closePliers();
+    movePliers(closeAngle);
+  }
+  else if (strcmp(cmd_msg.data, closeMaxP)==0)
+  {
+    movePliers(closeMaxAngle);  
   }
   else if (strcmp(cmd_msg.data, middle)==0)
   {
-    arretBalance = 1;
-    middlePliers();
+    movePliers(middleAngle);
   }
-  else if (strcmp(cmd_msg.data, balanceP)==0)
+  else if (strcmp(cmd_msg.data, departP)==0)
   {
-    arretBalance = 0;
-    balancePliers();
+    movePliers(poseDepart);  
   }
+  
   MsTimer2::start();
 }
+
+// Front Plier order callback for precise moves (input int16)
+void servo_precise(const std_msgs::Int16& cmd_msg){
+  MsTimer2::stop();
+  
+  movePliers(cmd_msg.data);  
+  
+  MsTimer2::start();
+}
+
+
 
 // Parasol command callback (input Empty)
 void ParasolCommandCallback(const std_msgs::Empty& msg){
@@ -353,7 +365,8 @@ int ConvertAngleServ3(float q3){
 //**********************************************************************
 ros::Subscriber<geometry_msgs::Twist> UarmCommand_sub("UarmCommand", PositionCommandCallBack); //
 ros::Subscriber<std_msgs::Int16> GripperCommand_sub("GripperCommand", GripperCommandCallBack);
-ros::Subscriber<std_msgs::String> sub("FrontPlierCommand", servo_cb);                          //
+ros::Subscriber<std_msgs::String> FrontPlierCommand_sub("FrontPlierCommand", servo_cb); //
+ros::Subscriber<std_msgs::Int16> FrontPlierPreciseCommand_sub("FrontPlierPreciseCommand", servo_precise); //
 ros::Subscriber<std_msgs::Empty> ParasolCommand_sub("ParasolCommand", ParasolCommandCallback); //
 
 //**********************************************************************
@@ -373,7 +386,8 @@ void setup(){
   nh.initNode();
   nh.subscribe(UarmCommand_sub);
   nh.subscribe(GripperCommand_sub);
-  nh.subscribe(sub);
+  nh.subscribe(FrontPlierCommand_sub);
+  nh.subscribe(FrontPlierPreciseCommand_sub);
   nh.subscribe(ParasolCommand_sub);
   nh.advertise(uarmState_pub);
   nh.advertise(uarmBehaviour_pub);
@@ -525,74 +539,23 @@ void sermove(float q[4]){
 //**********************************************************************
 // Front Pliers function
 //**********************************************************************
-void openMaxPliers()
+void movePliers(int angle)
 {
-  int pos = map(openMaxAngle, -150, 150, 0, 1023);
-  for (int i=0; i<=1; i++)
-  {
-    motor[i].writeInfo (TORQUE_ENABLE, 1);
-    motor[i].writeInfo (MAX_TORQUE, torqueLIM);
-    motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
-    motor[i].writeInfo(GOAL_POSITION, pos);
+  //checks to avoid any contacts with the frame of the robot
+  if (angle>100) {
+    angle=100;
   }
-}
-
-void openPliers()
-{
-  int pos = map(openAngle, -150, 150, 0, 1023);
-  for (int i=0; i<=1; i++)
-  {
-    motor[i].writeInfo (TORQUE_ENABLE, 1);
-    motor[i].writeInfo (MAX_TORQUE, torqueLIM);
-    motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
-    motor[i].writeInfo(GOAL_POSITION, pos);
+  if (angle<-50) {
+    angle=-50;
   }
-}
-
-void closePliers()
-{
-  int pos = map(closeAngle, -150, 150, 0, 1023);
+  
+  int pos = map(angle, -150, 150, 0, 1023);
   for (int i=0; i<=1; i++)
   {
     motor[i].writeInfo (TORQUE_ENABLE, 1);
     motor[i].writeInfo (MAX_TORQUE, torqueLIM);
     motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
     motor[i].writeInfo(GOAL_POSITION, pos);
-  }
-}
-
-void middlePliers()
-{
-  int pos = map(middleAngle, -150, 150, 0, 1023);
-  for (int i=0; i<=1; i++)
-  {
-    motor[i].writeInfo (TORQUE_ENABLE, 1);
-    motor[i].writeInfo (MAX_TORQUE, torqueLIM);
-    motor[i].writeInfo(MOVING_SPEED, map(rotSpeed, 0, 114, 0, 1023));
-    motor[i].writeInfo(GOAL_POSITION, pos);
-  }  
-}
-
-void balancePliers()
-{
-  int goalPos [2];
-  goalPos[0] = motor[0].readInfo (PRESENT_POSITION);
-  goalPos[1] = motor[1].readInfo (PRESENT_POSITION);
-  int sens = 1;
-  int debattement = map(balanceAngle, -150, 150, 0, 1023);
-  for (int i=0; i<=1; i++)
-  {
-    motor[i].writeInfo (TORQUE_ENABLE, 1);
-    motor[i].writeInfo (MAX_TORQUE, torqueLIM);
-  }  
-  while (!arretBalance)
-  {    
-    for (int i=0; i<=1; i++)
-    {
-      goalPos[i] = goalPos[i] + sens*debattement;
-      motor[i].writeInfo (GOAL_POSITION, goalPos[i]);
-    }  
-    sens = -sens;
   }
 }
   
