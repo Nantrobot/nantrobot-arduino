@@ -1,4 +1,3 @@
-
 /*
  * rosserial Uarm command
  *
@@ -111,8 +110,8 @@ const float q2nlincoef = 17.0/18.0;   // coefficient non linéarité entre serv2
 const float q2offset = 215.0;         // offset entre modèle et serv2 en °
 
   // SERVO 3 data : qServo = q3nlincoef*qModel + q4offset
-const int q3servmin= 10;              // limite min de consigne pour serv3 en °
-const int q3servmax= 170;             // limite max de consigne pour serv3 en °
+const int q3servmin= 0;              // limite min de consigne pour serv3 en °
+const int q3servmax= 180;             // limite max de consigne pour serv3 en °
 const int q3servmarg = 1;             // marge de consigne pour serv3 en °
 const float q3modmin = 10.0;         // limite min de consigne pour serv3 en ° (selon modèle)
 const float q3modmax = 170.0;          // limite max de consigne pour serv3 en ° (selon modèle)
@@ -139,9 +138,9 @@ char middle[]="middle";
 // Init Postion setup
 //**********************************************************************
 #define initSM0_angle 90        // position initiale du servo de base selon le modèle (en °)
-#define initSM1_angle 50        // position initiale du servo du bras 1 selon le modèle (en °)
-#define initSM2_angle 90       // position initiale du servo du bras 2 selon le modèle (en °)
-#define initSM3_angle 90        // position initiale du servo de l'effecteur selon le modèle (en °)
+#define initSM1_angle 80        // position initiale du servo du bras 1 selon le modèle (en °)
+#define initSM2_angle 120    // position initiale du servo du bras 2 selon le modèle (en °)
+#define initSM3_angle 40        // position initiale du servo de l'effecteur selon le modèle (en °)
 #define initSMGripper_angle 120 // position initiale du servo de la pince (en °)
 #define initSMParasol_angle 20        // position initiale du servo du parasol (en °)
 #define endSMParasol_angle 90       // position finale du servo du parasol (en °)
