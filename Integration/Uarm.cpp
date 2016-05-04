@@ -57,15 +57,15 @@ int Uarm::MGIUarm(float X[4]){
     angle[2]= angle[1]+theta2mtheta1;
     
     // recopie du dernier angle 
-/*    angle[3] = state[3]-angle[0];
-    if(angle[3] < -76.0*PI/180.0)
-        angle[3] += 2*PI;
-    if(angle[3] > 89.0*PI/180.0)
-        angle[3] -= 2*PI;*/
-    angle[3] = state[3];
+    angle[3] = state[3]-angle[0]+130*PI/180;
+    
+    if(angle[3] < 0)
+        angle[3] += PI;
+    if(angle[3] > PI)
+        angle[3] -= PI;
 
     // sécurité de commande 
-/*    if(angle[0] < 5.0*PI/180.0){
+    if(angle[0] < 5.0*PI/180.0){
       return Q0_LOW;
     }else if(angle[0] > 178.0*PI/180.0){
       return Q0_HIGH;
@@ -77,12 +77,12 @@ int Uarm::MGIUarm(float X[4]){
       return Q2_LOW;
     }else if(angle[2] > 182.0*PI/180.0){
       return Q2_HIGH;
-    }else if(angle[3] < -76.0*PI/180.0){
+    }else if(angle[3] < 0.0*PI/180.0){
       return Q3_LOW;
-    }else if(angle[3] > 89.0*PI/180.0){
+    }else if(angle[3] > 180.0*PI/180.0){
       return Q3_HIGH;
-    }else{*/
+    }else{
       return COMMAND_OK;
-   // }
+    }
     //------------------------
 }
